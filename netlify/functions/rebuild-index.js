@@ -20,10 +20,17 @@ const initializeServices = async () => {
     }
 };
 
+const getHeader = (headers, name) => {
+    if (!headers) return undefined;
+    const direct = headers[name];
+    if (direct !== undefined) return direct;
+    return headers[name.toLowerCase()];
+};
+
 exports.handler = async (event, context) => {
     const headers = {
         'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type',
+        'Access-Control-Allow-Headers': 'Content-Type, X-Rebuild-Token',
         'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
         'Content-Type': 'application/json'
     };
@@ -39,6 +46,16 @@ exports.handler = async (event, context) => {
             statusCode: 405,
             headers,
             body: JSON.stringify({ error: 'Method not allowed' })
+        };
+    }
+
+    const rebuildToken = process.env.REBUILD_INDEX_TOKEN;
+    const requestToken = getHeader(event.headers, 'x-rebuild-token');
+    if (rebuildToken && requestToken !== rebuildToken) {
+        return {
+            statusCode: 401,
+            headers,
+            body: JSON.stringify({ error: 'Unauthorized' })
         };
     }
 

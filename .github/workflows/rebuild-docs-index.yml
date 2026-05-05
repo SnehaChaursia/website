@@ -48,10 +48,15 @@ jobs:
       - name: Rebuild documentation index
         run: |
           echo "🔄 Triggering documentation index rebuild..."
-          
+
+          CURL_HEADERS=(-H "Content-Type: application/json")
+          if [ -n "${{ secrets.REBUILD_INDEX_TOKEN }}" ]; then
+            CURL_HEADERS+=(-H "X-Rebuild-Token: ${{ secrets.REBUILD_INDEX_TOKEN }}")
+          fi
+
           RESPONSE=$(curl -s -w "\n%{http_code}" \
-            -X POST "${{ steps.get-url.outputs.SITE_URL }}/api/admin/rebuild-index" \
-            -H "Content-Type: application/json" \
+            -X POST "${{ steps.get-url.outputs.SITE_URL }}/.netlify/functions/rebuild-index" \
+            "${CURL_HEADERS[@]}" \
             -d '{}' \
             --max-time 30)
           
