@@ -21,19 +21,34 @@ const initializeServices = async () => {
     }
 };
 
+const getHeader = (headers, name) => {
+    if (!headers) return undefined;
+    const direct = headers[name];
+    if (direct !== undefined) return direct;
+    return headers[name.toLowerCase()];
+};
+
 // Verify webhook signature for security
 function verifyWebhookSignature(payload, signature, secret) {
     if (!secret || !signature) return true; // Allow unsigned webhooks if no secret configured
-    
+
     const expectedSignature = crypto
         .createHmac('sha256', secret)
         .update(payload)
         .digest('hex');
-    
-    const providedSignature = signature.startsWith('sha256=') 
-        ? signature.slice(7) 
+
+    const providedSignature = signature.startsWith('sha256=')
+        ? signature.slice(7)
         : signature;
-    
+
+    const isHex = /^[a-f0-9]+$/i;
+    if (
+        !isHex.test(providedSignature) ||
+        providedSignature.length !== expectedSignature.length
+    ) {
+        return false;
+    }
+
     return crypto.timingSafeEqual(
         Buffer.from(expectedSignature, 'hex'),
         Buffer.from(providedSignature, 'hex')
@@ -43,7 +58,7 @@ function verifyWebhookSignature(payload, signature, secret) {
 exports.handler = async (event, context) => {
     const headers = {
         'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type, X-Hub-Signature-256, X-Webhook-Signature',
+        'Access-Control-Allow-Headers': 'Content-Type, X-Hub-Signature-256, X-Webhook-Signature, X-Rebuild-Token',
         'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
         'Content-Type': 'application/json'
     };
@@ -75,10 +90,20 @@ exports.handler = async (event, context) => {
             }
         }
 
+        const rebuildToken = process.env.REBUILD_INDEX_TOKEN;
+        const requestToken = getHeader(event.headers, 'x-rebuild-token');
+        if (rebuildToken && requestToken !== rebuildToken) {
+            return {
+                statusCode: 401,
+                headers,
+                body: JSON.stringify({ error: 'Unauthorized' })
+            };
+        }
+
         // Verify webhook signature if configured
         const webhookSecret = process.env.WEBHOOK_SECRET;
-        const signature = event.headers['x-hub-signature-256'] || event.headers['x-webhook-signature'];
-        
+        const signature = getHeader(event.headers, 'x-hub-signature-256') || getHeader(event.headers, 'x-webhook-signature');
+
         if (webhookSecret && event.httpMethod === 'POST') {
             const isValid = verifyWebhookSignature(event.body, signature, webhookSecret);
             if (!isValid) {
